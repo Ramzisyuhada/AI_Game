@@ -9,6 +9,7 @@ public class SimpleFSM : FSM
     public enum FSMState
     {
         None,
+        Run,
         Move
     }
     
@@ -18,7 +19,11 @@ public class SimpleFSM : FSM
     private Vector3 pointPosisition;
     private Animator animator;
     private NavMeshAgent agent;
+    private Rigidbody rb;
+    private bool IsWaiting;
+    private GameObject player;
 
+    [SerializeField] private float chaseRange = 20f; // Jarak untuk mulai mengejar
 
     private void OnCollisionEnter(Collision collision)
     {
@@ -26,12 +31,16 @@ public class SimpleFSM : FSM
     }
     protected override void fsm_init()
     {
+        player = GameObject.FindGameObjectWithTag("Player");
+
         currentstate = FSMState.Move;
-        curspeed = 5f;
+        curspeed = 0.5f;
         agent = GetComponent<NavMeshAgent>();
         agent.avoidancePriority = Random.RandomRange(0, 100);
         animator = GetComponent<Animator>();
+        rb = GetComponent<Rigidbody>();
         foreach (var point in GameObject.FindGameObjectsWithTag("Waypoint"))
+
         {
             Waypoints.Add(point);
         }
@@ -46,55 +55,59 @@ public class SimpleFSM : FSM
 
     protected override void fsm_update()
     {
+
+        float playerDistance = Vector3.Distance(transform.position, player.transform.position);
+
+        if (playerDistance < chaseRange)
+        {
+            currentstate = FSMState.Run;
+        }
+        else if (currentstate == FSMState.Run && playerDistance >= chaseRange + 5f)
+        {
+            // Player menjauh, kembali ke Move
+            currentstate = FSMState.Move;
+            FindNextPoint();
+        }
         switch (currentstate)
         {
             case FSMState.Move:
                 UpdateMove();
                 break;
             default:
+                UpdateRun();
                 break;
 
         }
+     
         Debug.Log(pointPosisition);
         Debug.Log(transform.position);
     }
-    /*  protected override void fsm_update() {
-          switch (currentstate)
-          {
-              case FSMState.Move:UpdateMove(); 
-                  break;
-              default:
-                  break;
+    private void UpdateRun()
+    {
+        if (player == null) return;
 
-          }
-
-
-          if(Vector3.Distance(transform.position, Dest) < 100f)
-          {
-              currentstate = FSMState.Move;
-
-          }
-      }
-*/
+        agent.destination = player.transform.position;
+        curspeed = 1f; // Animasi lari
+        animator.SetFloat("Blend", curspeed, 0.1f, Time.deltaTime);
+    }
     private void FindNextPoint()
     {
+        if (Waypoints.Count == 0)
+        {
+            Debug.LogWarning("Waypoints kosong, tidak bisa mencari tujuan baru!");
+            return;
+        }
 
-        int randindex = Random.RandomRange(0, Waypoints.Count);
-        float radius = 5f;
-        Vector3 rndPosisition = Vector3.zero;
-        Dest = Waypoints[randindex].transform.position + rndPosisition;
-        Debug.Log(Waypoints[randindex].gameObject);
-        /*        Dest = Waypoints[randindex].transform.position + rndPosisition;
-        */
-        /*     if (IsInCurrentRange(Dest)) {
-   *//*              rndPosisition = new Vector3(Random.Range(-radius, radius), 0.0f, Random.Range(-radius, radius));
-   *//*              Dest = Waypoints[randindex].transform.position + rndPosisition;
+        int randIndex = UnityEngine.Random.Range(0, Waypoints.Count);
+        Vector3 randomOffset = Vector3.zero; // Bisa pakai Random.insideUnitSphere * radius kalau mau variasi
 
-             }*/
+        Dest = Waypoints[randIndex].transform.position + randomOffset;
+        agent.destination = Dest; // <-- PENTING!
+        pointPosisition = Dest;
 
-        /*        animator.SetBool("isMoving", true);  // Set animasi bergerak
-        */
+        Debug.Log($"Next point: {Waypoints[randIndex].name} - Posisi: {Dest}");
     }
+
 
 
     private bool IsInCurrentRange(Vector3 pos)
@@ -109,15 +122,39 @@ public class SimpleFSM : FSM
     private void UpdateMove()
     {
 
-        if (Vector3.Distance(transform.position, agent.destination) < agent.stoppingDistance + 1f)
+        if (!IsWaiting && Vector3.Distance(transform.position, agent.destination) < agent.stoppingDistance + 0.5f)
         {
-            FindNextPoint();
+            StartCoroutine(WaitBeforeNextMove());
+
         }
-        agent.destination = Dest;
-            /* Quaternion targetrotation = Quaternion.LookRotation(Dest - transform.position);
-         transform.rotation = Quaternion.Slerp(transform.rotation, targetrotation, Time.deltaTime * 2F);
-         transform.Translate(Vector3.forward * Time.deltaTime 
-             * curspeed);*/
+        if (!IsWaiting)
+        {
+            agent.destination = Dest;
+
+            curspeed = (agent.velocity.magnitude > 0.1f) ? 0.5f : 0f;
+            animator.SetFloat("Blend", curspeed, 0.1f, Time.deltaTime);
+        }
+        else
+        {
+            animator.SetFloat("Blend", 0f);
+        }
+
+
+
+    }
+
+    private IEnumerator WaitBeforeNextMove()
+    {
+        IsWaiting = true;
+        curspeed = 0f;
+        animator.SetFloat("Blend", 0f);
+
+        yield return new WaitForSeconds(3f);
+
+        FindNextPoint();
+
+        curspeed = 0.5f;
+        IsWaiting = false;
     }
     protected override void fsm_fixedUpdate()
     {

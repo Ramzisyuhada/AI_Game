@@ -36,9 +36,7 @@ public class Vision : Sense
                     {
                         Move();
 
-                       /* Animator animator = transform.GetComponent<Animator>();
-
-                        animator.runtimeAnimatorController = animatorController;*/
+                      
                     }
                 }
 
@@ -65,7 +63,7 @@ frontRayPoint;
         Debug.DrawLine(transform.position, leftRayPoint, Color.green);
         Debug.DrawLine(transform.position, rightRayPoint, Color.green);
     }
-    private void Move()
+    public void Move()
     {
 
         Vector3 direction = new Vector3(player.transform.position.x - transform.position.x, 0, player.transform.position.z - transform.position.z);
